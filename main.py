@@ -1,14 +1,23 @@
+# import time
+# import threading
 import time
-import threading
 import tkinter as tk
 from tkinter import ttk, PhotoImage
 
 # https://www.youtube.com/watch?v=FJeXp5yZd-g
 
 
-class PomodoroTimer:
-
+class BridgeTimer:
     def __init__(self):
+
+        self.state = {
+            "time_set": 1,  # Programmed time in minutes
+            "pause_set": 2,  # Pause time set in minues
+            "state": "Running",  # Several possibilities: Running, Started, Paused, Stopped, Programming
+            "current": 0,  # Time in seconds
+            "blinking": False
+        }
+
         self.root = tk.Tk()
         self.root.geometry("600x300")
         self.root.title("Pomodoro Bridge Timer")
@@ -16,121 +25,127 @@ class PomodoroTimer:
         # noinspection PyProtectedMember,PyUnresolvedReferences
         self.root.tk.call('wm', 'iconphoto', self.root._w, PhotoImage(file='tomato.png'))
 
-        self.s = ttk.Style()
-        self.s.configure('TNotebook.Tab', font=('Ubuntu', 16))
-        self.s.configure('TButton', font=('Ubuntu', 16))
+        # Define grid on 'root'
+        self.root.columnconfigure(0, weight=1)
+        self.root.columnconfigure(1, weight=1)
+        self.root.columnconfigure(2, weight=1)
+        self.root.columnconfigure(3, weight=1)
+        self.root.columnconfigure(4, weight=1)
+        self.root.rowconfigure(0, weight=3)
+        # self.root.rowconfigure(1, weight=1)
 
-        self.tabs = ttk.Notebook(self.root)
-        self.tabs.pack(fill='both', pady=10, expand=True)
+        self.text_variable = tk.StringVar(value="00:00")
+        self.label_time = ttk.Label(
+            self.root,
+            textvariable=self.text_variable,
+            font=("Digital Dismay", 128),
+            foreground="red")
+        self.label_time.grid(column=0, row=0, columnspan=5)
 
-        self.tab1 = ttk.Frame(self.tabs, width=600, height=100)
-        self.tab2 = ttk.Frame(self.tabs, width=600, height=100)
-        self.tab3 = ttk.Frame(self.tabs, width=600, height=100)
+        self.button_start = ttk.Button(self.root, text="Start", command=lambda: self.start('Start'))
+        self.button_stop = ttk.Button(self.root, text="Stop", command=self.stop)
+        self.button_prog = ttk.Button(self.root, text="Prog")
+        self.button_plus = ttk.Button(self.root, text="+")
+        self.button_min = ttk.Button(self.root, text="-")
+        buttons = [self.button_start, self.button_stop, self.button_prog, self.button_plus, self.button_min]
+        for button in range(len(buttons)):
+            buttons[button].grid(column=button, row=1)
 
-        self.pomodoro_timer_label = ttk.Label(self.tab1, text="25:00", font=('Ubuntu', 48))
-        self.pomodoro_timer_label.pack(pady=20)
-        self.short_break_timer_label = ttk.Label(self.tab2, text="05:00", font=('Ubuntu', 48))
-        self.short_break_timer_label.pack(pady=20)
-        self.long_break_timer_label = ttk.Label(self.tab3, text="15:00", font=('Ubuntu', 48))
-        self.long_break_timer_label.pack(pady=20)
+        self.statusbar = tk.Label(self.root, text=self.state['state'], bd=1, relief=tk.SUNKEN, anchor=tk.W)
 
-        self.grid_layout = ttk.Frame(self.root)
-        self.grid_layout.pack(pady=10)
+        self.statusbar.grid(column=0, row=2, columnspan=5, sticky=tk.EW)
 
-        self.start_button = ttk.Button(self.grid_layout, text='Start', command=self.start_timer_thread)
-        self.start_button.grid(row=0, column=0)
-        self.skip_button = ttk.Button(self.grid_layout, text='Skip', command=self.skip_clock)
-        self.skip_button.grid(row=0, column=1)
-        self.reset_button = ttk.Button(self.grid_layout, text='Reset', command=self.reset_clock)
-        self.reset_button.grid(row=0, column=2)
-
-        self.tabs.add(self.tab1, text="Pomodoro")
-        self.tabs.add(self.tab2, text="Short Break")
-        self.tabs.add(self.tab3, text="Long Break")
-
-        self.pomodoro_counter_label = ttk.Label(self.grid_layout, text="Pomodoros: 0", font=("Ubuntu", 16))
-        self.pomodoro_counter_label.grid(column=0, row=1, columnspan=3, pady=10)
-
-        self.pomodoros = 0
-        self.skipped = False
-        self.stopped = False
-        self.running = False
-
+        # The clock will be started. Every other event will be triggered by bottons
+        self.launch_clock()
         self.root.mainloop()
 
-    def start_timer_thread(self):
-        if not self.running:
-            t = threading.Thread(target=self.start_timer)
-            t.start()
-            self.running = True
+    def set_state(self, state):
+        print(f'Change state to {state}')
+        if state not in ['Running', 'Started', 'Paused', 'Stopped', 'Programming']:
+            print(f"state {state} not in ['Running', 'Started', 'Paused', 'Stopped', 'Programming']")
+        self.state['state'] = state
+        self.statusbar.configure(text=self.state['state'])
 
-    def start_timer(self):
-        self.stopped = False
-        self.skipped = False
-        self.running = False
-        timer_id = self.tabs.index(self.tabs.select()) + 1
+    def launch_clock(self):
+        """
+        When the clock is started it will count incrementally from zero.
+        self.state['state'] will be 'Running'
 
-        if timer_id == 1:
-            full_seconds = 60 * 25
-            while full_seconds > 0 and not self.stopped:
-                minutes, seconds = divmod(full_seconds, 60)
-                self.pomodoro_timer_label.config(text=f"{minutes:02d}:{seconds:02d}")
-                self.root.update()
-                time.sleep(1)
-                full_seconds -= 1
-            if not self.stopped or self.skipped:
-                self.pomodoros += 1
-                self.pomodoro_timer_label.config(text=f"Pomodoros: {self.pomodoros}")
-                if self.pomodoros % 4 == 0:
-                    self.tabs.select(2)
-                else:
-                    self.tabs.select(1)
-                self.start_timer()
-        elif timer_id == 2:
-            full_seconds = 60 * 5
-            # noinspection DuplicatedCode
-            while full_seconds > 0 and not self.stopped:
-                minutes, seconds = divmod(full_seconds, 60)
-                self.short_break_timer_label.config(text=f"{minutes:02d}:{seconds:02d}")
-                self.root.update()
-                time.sleep(1)
-                full_seconds -= 1
-            if not self.stopped or self.skipped:
-                self.tabs.select(0)
-                self.start_timer()
-        elif timer_id == 2:
-            full_seconds = 60 * 15
-            # noinspection DuplicatedCode
-            while full_seconds > 0 and not self.stopped:
-                minutes, seconds = divmod(full_seconds, 60)
-                self.long_break_timer_label.config(text=f"{minutes:02d}:{seconds:02d}")
-                self.root.update()
-                time.sleep(1)
-                full_seconds -= 1
-            if not self.stopped or self.skipped:
-                self.tabs.select(0)
-                self.start_timer()
+        :return:
+        """
+        # Stop if the 'Stop' button is clicked
+        if self.state['state'] == 'Stopped':
+            return
+        pause = 1000
+        hrs = self.state["current"] // 60 * 60
+        mins = self.state["current"] // 60
+        secs = self.state["current"] % 60
+        string = f"{mins:02}:{secs:02}"
+        if self.state["current"] > 60 * 60:
+            self.state['blinking'] = not self.state['blinking']
+            string = f"{hrs:02}:{mins:02}"
+            pause = 500
+        if self.state["blinking"]:
+            string = f"{hrs:02}.{mins:02}"
+        else:
+            if self.state["state"] == "Running":
+                self.state["current"] += 1
 
-    def reset_clock(self):
-        self.stopped = True
-        self.skipped = False
-        self.pomodoros = 0
-        self.pomodoro_timer_label.config(text="25:00")
-        self.short_break_timer_label.config(text="05:00")
-        self.long_break_timer_label.config(text="15:00")
-        self.pomodoro_counter_label.config(text="Pomodoros: 0")
-        self.running = False
+        self.text_variable.set(string)
+        self.label_time.after(pause, self.launch_clock)
 
-    def skip_clock(self):
-        current_tab = self.tabs.index(self.tabs.select())
-        if current_tab == 0:
-            self.pomodoro_timer_label.config(text="25:00")
-        elif current_tab == 1:
-            self.short_break_timer_label.config(text="05:00")
-        elif current_tab == 2:
-            self.long_break_timer_label.config(text="15:00")
-        self.stopped = True
-        self.skipped = True
+    def stop(self):
+        if self.state['state'] == 'Stopped':
+            self.state['current'] = 0
+            self.text_variable.set('00:00')
+        else:
+            # Do not change state['current']; We may continue from here ('pause')
+            self.set_state('Stopped')
+
+    def start(self, action=''):
+        """
+        Countdown running
+        :param action: The button click, either '' (default) or 'Start' (-> clicked)
+        :return:
+        """
+        print(f"{self.state['current']}")
+        if action == '' and self.state['state'] == 'Stopped':
+            # Stop the clock
+            return
+        if action == 'Start' and self.state['state'] == 'Started':
+            # Already running
+            return
+        if action == 'Start' and self.state['state'] != 'Started':
+            # Starting a clock that is not already running
+            if self.state['current'] == 0:
+                self.state['current'] = self.state['time_set'] * 60
+        if self.state['state'] != 'Started':
+            self.set_state('Started')
+        self.run()
+
+    def pause(self):
+        self.state['current'] = self.state['pause_set'] * 60
+        self.set_state('Paused')
+        self.run()
+
+    def run(self):
+        pause = 1000
+        self.state["current"] -= 1
+        hrs = self.state["current"] // 60 * 60
+        mins = self.state["current"] // 60
+        secs = self.state["current"] % 60
+        string = f"{mins:02}:{secs:02}"
+        self.text_variable.set(string)
+        if self.state['current'] == 0:
+            print('Change state')
+            time.sleep(1)
+            if self.state['state'] == 'Started':
+                self.pause()
+            elif self.state['state'] == 'Paused':
+                self.start()
+            return
+        self.label_time.after(pause, self.run)
 
 
-PomodoroTimer()
+if __name__ == "__main__":
+    BridgeTimer()
